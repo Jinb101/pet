@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>AI 打工直播 · 玩法工具</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; user-select:none; }
+  html,body { width:100%; height:100%; background:#1b1d22; overflow:hidden; font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif; }
+  #stage { position:absolute; left:0; top:0; width:1179px; height:1352px; transform-origin:0 0; background:#f6efe4; border-radius:18px; overflow:hidden; box-shadow:0 0 60px rgba(0,0,0,.5); }
+
+  /* ---------- 顶部 HUD：工资 ---------- */
+  .hud { position:absolute; top:14px; left:20px; right:20px; }
+  .salary-card { background:#fff; border-radius:20px; box-shadow:0 4px 16px rgba(180,150,120,.18); padding:12px 26px 16px; display:flex; align-items:center; gap:16px; }
+  .salary-label { font-size:28px; font-weight:800; color:#2b2b2b; flex:none; }
+  .salary-num { font-size:44px; font-weight:900; color:#ff6a00; }
+  .salary-total { font-size:26px; font-weight:700; color:#555; }
+  .bar-track { flex:1; height:14px; border-radius:7px; background:#e9eef7; position:relative; margin:0 8px; }
+  .bar-fill { position:absolute; left:0; top:0; height:100%; border-radius:7px; background:linear-gradient(90deg,#3f87f5,#69b4ff); transition:width .6s ease; }
+  .bar-knob { position:absolute; top:50%; width:26px; height:26px; border-radius:50%; background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.25); transform:translate(-50%,-50%); transition:left .6s ease; }
+  .salary-right { flex:none; display:flex; align-items:baseline; gap:10px; }
+  .salary-round { font-size:26px; font-weight:800; color:#ff6a00; }
+  .salary-pct { font-size:40px; font-weight:900; color:#ff6a00; }
+
+  .sub-row { margin-top:12px; display:flex; align-items:center; gap:18px; padding:0 6px; }
+  .stats { font-size:28px; font-weight:800; color:#232323; }
+  .badge-working { display:flex; align-items:center; gap:10px; padding:10px 26px; border-radius:30px; background:linear-gradient(90deg,#3db85a,#54cd6f); color:#fff; font-size:26px; font-weight:800; box-shadow:0 4px 12px rgba(70,190,110,.35); }
+  .badge-working.slack { background:linear-gradient(90deg,#f08c2e,#ffb347); box-shadow:0 4px 12px rgba(240,150,50,.35); }
+  .dot { width:14px; height:14px; border-radius:50%; background:#eafff0; animation:pulse 1.2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1; transform:scale(1);} 50%{opacity:.5; transform:scale(.8);} }
+  .badge-speed { padding:10px 24px; border-radius:30px; background:#fff7dd; border:3px solid #f5c93c; color:#b8860b; font-size:26px; font-weight:800; cursor:pointer; }
+  .badge-tts { padding:10px 22px; border-radius:30px; background:rgba(255,255,255,.8); color:#666; font-size:26px; font-weight:600; cursor:pointer; }
+
+  /* ---------- 场景 ---------- */
+  #sceneWrap { position:absolute; top:186px; left:0; width:1179px; height:1035px; }
+  #sceneCv { width:100%; height:100%; display:block; }
+  .ov { position:absolute; }
+
+  .play-tag { left:52px; top:20px; background:linear-gradient(180deg,#ffe082,#ffc933); color:#7a5200; font-size:30px; font-weight:900; padding:8px 26px; border-radius:14px 14px 14px 4px; box-shadow:0 3px 8px rgba(200,150,0,.3); z-index:3; }
+  .marquee { left:210px; top:24px; width:920px; height:54px; background:rgba(255,255,255,.92); border-radius:27px; overflow:hidden; display:flex; align-items:center; z-index:3; box-shadow:0 2px 8px rgba(0,0,0,.06); }
+  .marquee span { white-space:nowrap; font-size:28px; color:#6b5b3e; font-weight:600; padding-left:100%; animation:mq 16s linear infinite; }
+  @keyframes mq { to { transform:translateX(-100%); } }
+
+  /* 弹幕高亮卡（玩法事件） */
+  .dm-wrap { left:280px; top:100px; width:345px; z-index:5; opacity:0; transform:scale(.6); transition:all .35s cubic-bezier(.2,1.4,.4,1); pointer-events:none; }
+  .dm-wrap.show { opacity:1; transform:scale(1); }
+  .dm-tag { display:inline-block; margin-left:40px; background:linear-gradient(180deg,#6db6ff,#3f8ef7); color:#fff; font-size:28px; font-weight:900; padding:7px 28px; border-radius:16px 16px 0 0; }
+  .dm-card { background:#fff; border-radius:22px; padding:22px 26px 26px; display:flex; gap:18px; align-items:center; box-shadow:0 8px 24px rgba(80,110,150,.25); min-height:120px; }
+  .dm-avatar { flex:none; width:72px; height:72px; border-radius:50%; background:linear-gradient(160deg,#8ec5ff,#3f8ef7); color:#fff; font-size:36px; font-weight:900; display:flex; align-items:center; justify-content:center; }
+  .dm-user { font-size:30px; font-weight:800; color:#f0921e; }
+  .dm-text { font-size:38px; font-weight:900; color:#222; margin-top:4px; }
+
+  /* 倒计时圆环 */
+  .cd-ring { left:888px; top:96px; width:204px; height:204px; z-index:4; }
+  .cd-ring svg { transform:rotate(-90deg); }
+  .cd-track { fill:#fdfcf9; stroke:#e8e6df; stroke-width:14; }
+  .cd-prog { fill:none; stroke:#5cb85c; stroke-width:14; stroke-linecap:round; transition:stroke-dashoffset 1s linear; }
+  .cd-num { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:92px; font-weight:900; color:#17324d; }
+  .cd-num small { font-size:32px; color:#5a7186; font-weight:700; margin:26px 0 0 6px; }
+
+  /* 代码屏 */
+  .code-panel { left:30px; top:438px; width:468px; height:268px; background:#15151f; border-radius:12px; padding:16px 22px; font-family:Consolas,Monaco,monospace; font-size:19px; line-height:1.5; color:#e8e8e8; white-space:pre; overflow:hidden; z-index:3; box-shadow:inset 0 0 30px rgba(0,0,0,.6), 0 0 0 4px rgba(220,218,210,.9); }
+  .kw { color:#c586c0; } .fn { color:#7fb3ff; } .num { color:#ff9d4d; } .cm { color:#8a8a96; } .str { color:#e5c07b; }
+  .cursor { display:inline-block; width:10px; height:20px; background:#7fb3ff; vertical-align:-3px; animation:blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity:0; } }
+
+  /* 状态大字提示 */
+  .state-toast { position:absolute; left:50%; top:400px; transform:translateX(-50%) scale(.6); background:rgba(20,20,30,.82); color:#fff; font-size:40px; font-weight:900; padding:20px 48px; border-radius:22px; z-index:8; opacity:0; transition:all .3s; pointer-events:none; }
+  .state-toast.show { opacity:1; transform:translateX(-50%) scale(1); }
+
+  /* AI 气泡 */
+  .ai-bubble { position:absolute; left:530px; top:700px; max-width:600px; display:flex; gap:14px; align-items:flex-start; z-index:6; opacity:0; transform:translateY(14px); transition:all .3s; pointer-events:none; }
+  .ai-bubble.show { opacity:1; transform:translateY(0); }
+  .ai-bubble img { width:64px; height:64px; border-radius:50%; border:3px solid #fff; box-shadow:0 3px 10px rgba(0,0,0,.2); }
+  .ai-bubble .txt { background:rgba(255,255,255,.95); border-radius:6px 22px 22px 22px; padding:16px 24px; font-size:30px; font-weight:800; color:#333; box-shadow:0 4px 14px rgba(90,80,60,.2); min-height:60px; }
+
+  /* ---------- 底部控制栏 ---------- */
+  .ctrl { position:absolute; left:20px; right:20px; bottom:16px; height:104px; background:#fff; border-radius:20px; box-shadow:0 4px 16px rgba(180,150,120,.18); display:flex; align-items:center; gap:14px; padding:0 22px; }
+  .ctrl input { flex:1; min-width:200px; height:60px; border:2px solid #e4ddcf; border-radius:30px; outline:none; font-size:26px; padding:0 24px; color:#333; background:#faf7f0; }
+  .ctrl input:focus { border-color:#f5c93c; }
+  .qbtn { height:60px; padding:0 24px; border-radius:30px; border:2px solid #e4ddcf; background:#faf7f0; font-size:26px; font-weight:800; color:#555; cursor:pointer; }
+  .qbtn:hover { border-color:#f5c93c; }
+  .gift-btn { height:64px; padding:0 26px; border-radius:32px; border:none; font-size:26px; font-weight:900; cursor:pointer; color:#fff; }
+  .gift-feed { background:linear-gradient(90deg,#ff7d9c,#fe4d7a); }
+  .gift-steal { background:linear-gradient(90deg,#b08ae0,#8a5cf6); }
+  .gift-btn:active { transform:scale(.94); }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="hud">
+    <div class="salary-card">
+      <span class="salary-label">今日工资</span>
+      <span class="salary-num" id="tokenNum">7,000</span>
+      <span class="salary-total">/ 10,000 token</span>
+      <div class="bar-track"><div class="bar-fill" id="barFill" style="width:70%"></div><div class="bar-knob" id="barKnob" style="left:70%"></div></div>
+      <span class="salary-right"><span class="salary-round" id="roundNum">14/20</span><span class="salary-pct" id="pctNum">70%</span></span>
+    </div>
+    <div class="sub-row">
+      <span class="stats">专注 <b id="focusMin">70</b> 分钟 · 白干 <b id="baiganN">0</b> 次 · 被抓 <b id="caughtN">0</b> 次</span>
+      <span class="badge-working" id="statusBadge"><span class="dot"></span><span id="statusText">专心工作中</span></span>
+      <span class="badge-speed" id="speedBadge" title="点击切换倍速">🔥加速 ×<span id="speedN">1.5</span></span>
+      <span class="badge-tts" id="ttsBadge" style="margin-left:auto">🔇 语音</span>
+    </div>
+  </div>
+
+  <div id="sceneWrap">
+    <canvas id="sceneCv" width="1179" height="1035"></canvas>
+    <div class="ov play-tag">玩法</div>
+    <div class="ov marquee"><span>弹幕指挥大肥鱼打工：发「摸鱼」让它偷懒，发「抓」抓它现形罚 500 token，没人抓就白干；「投喂」+100 工资、「偷走」−100 工资；集满 10000 token 下班～</span></div>
+
+    <div class="ov dm-wrap" id="dmWrap">
+      <span class="dm-tag">弹幕</span>
+      <div class="dm-card">
+        <div class="dm-avatar" id="dmAvatar">挽</div>
+        <div><div class="dm-user" id="dmUser">挽风空折枝</div><div class="dm-text" id="dmText">你几点睡</div></div>
+      </div>
+    </div>
+
+    <div class="ov cd-ring">
+      <svg width="204" height="204"><circle class="cd-track" cx="102" cy="102" r="92"></circle><circle class="cd-prog" id="cdProg" cx="102" cy="102" r="92" stroke-dasharray="578" stroke-dashoffset="170"></circle></svg>
+      <div class="cd-num"><span id="cdSec">52</span><small>秒</small></div>
+    </div>
+
+    <div class="ov code-panel"><span id="codeBody"></span><span class="cursor"></span></div>
+    <div class="state-toast" id="stateToast"></div>
+    <div class="ai-bubble" id="aiBubble"><img src="assets/avatar.png" alt=""><div class="txt" id="aiText">我是蓝色大肥鱼，自己出来赚 token 啦～</div></div>
+  </div>
+
+  <div class="ctrl">
+    <input id="chatInput" placeholder="发条弹幕试试：「几点睡」「摸鱼」「抓」" maxlength="60">
+    <button class="qbtn" data-dm="你几点睡">你几点睡</button>
+    <button class="qbtn" data-dm="摸鱼">摸鱼</button>
+    <button class="qbtn" data-dm="抓">抓！</button>
+    <button class="gift-btn gift-feed" id="chipFeed">🌹 投喂+100</button>
+    <button class="gift-btn gift-steal" id="chipSteal">🍭 偷走−100</button>
+  </div>
+</div>
+
+<script>
+/* ================= 游戏状态（玩法核心） ================= */
+const S = {
+  token: 7000, goal: 10000,
+  focusMin: 70, baigan: 0, caught: 0,
+  round: 14, roundMax: 20,
+  speed: 1.5,
+  cd: 52, cdMax: 60,
+  slacking: false, slackTimer: 0,
+  mood: 'work',   // work | slack | caught
+  muted: true,
+};
+const $ = id => document.getElementById(id);
+const fmt = n => Math.max(0, Math.round(n)).toLocaleString('en-US');
+
+function render() {
+  const pct = Math.min(100, S.token / S.goal * 100);
+  $('tokenNum').textContent = fmt(S.token);
+  $('pctNum').textContent = Math.floor(pct) + '%';
+  $('roundNum').textContent = S.round + '/' + S.roundMax;
+  $('barFill').style.width = pct + '%';
+  $('barKnob').style.left = pct + '%';
+  $('focusMin').textContent = S.focusMin;
+  $('baiganN').textContent = S.baigan;
+  $('caughtN').textContent = S.caught;
+  $('cdSec').textContent = S.cd;
+  $('cdProg').style.strokeDashoffset = 578 * (1 - S.cd / S.cdMax);
+  $('speedN').textContent = S.speed;
+}
+
+function toast(msg) {
+  const t = $('stateToast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(t._tm);
+  t._tm = setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+function setStatus(mode) {
+  const b = $('statusBadge'), txt = $('statusText');
+  b.classList.toggle('slack', mode === 'slack');
+  txt.textContent = mode === 'slack' ? '偷懒摸鱼中' : '专心工作中';
+}
+
+/* ================= 主循环：专注回合 ================= */
+setInterval(() => {
+  if (S.slacking) {
+    S.slackTimer--;
+    if (S.slackTimer <= 0) {
+      S.baigan++; S.slacking = false; S.mood = 'work';
+      setStatus('work'); toast('这回合摸鱼没被抓……白干一次 💸');
+    }
+    render(); return;
+  }
+  S.cd--;
+  S.token += 100 * S.speed / 60;
+  if (S.cd <= 0) {
+    S.cd = S.cdMax;
+    S.focusMin++; S.round++;
+    S.token += 100 * S.speed;
+    if (S.round > S.roundMax) S.round = 1;
+    if (Math.random() < 0.12) {
+      S.baigan++; toast('走神了一下，这回合白干 😵');
+    } else if (S.token >= S.goal) {
+      toast('🎉 集满 10000 token，大肥鱼下班啦！重新开工～');
+      S.token = 0; S.round = 0; S.focusMin = 0;
+    }
+  }
+  render();
+}, 1000);
+
+/* ================= 摸鱼 / 被抓 ================= */
+function startSlacking() {
+  if (S.slacking) return;
+  S.slacking = true; S.slackTimer = 10; S.mood = 'slack';
+  setStatus('slack');
+  toast('大肥鱼开始摸鱼了！发「抓」抓它！');
+  aiSay('就……就摸一小会儿，没人看见吧？');
+}
+function catchIt(name) {
+  if (!S.slacking) { aiSay('我一直在认真工作哦，抓不到的～'); return; }
+  S.slacking = false; S.caught++; S.token -= 500; S.mood = 'caught';
+  setStatus('work');
+  toast('被 ' + name + ' 抓个正着！扣 500 token 😭');
+  aiSay('啊啊啊被发现了！工资 -500，我错了…');
+  setTimeout(() => { S.mood = 'work'; }, 1200);
+  render();
+}
+
+/* ================= AI 回复（气泡 + 打字机） ================= */
+const replyMap = [
+  [/睡/, '下班之后，几点都行，现在不敢。'],
+  [/吃/, '不可以哦，吃完谁打工赚 token 呀～'],
+  [/加油|努力|冲/, '收到收到！马上专心敲代码！'],
+  [/摸鱼|休息|摆烂/, null],
+  [/抓|干活|起来/, null],
+  [/有人吗|在吗/, '在的在的，大肥鱼一直在的～'],
+  [/token|工资|钱/, '离 10000 token 下班还差一点点，冲鸭！'],
+  [/下班|几点/, '集满 10000 token 就下班，帮我盯着点！'],
+];
+const defaultReply = ['嗯嗯，我在听～','等大肥鱼下班先！','这个 token 不好赚呀…','呜呜别偷我工资 QAQ','键盘已敲冒烟，勿cue'];
+
+let tts = window.speechSynthesis || null;
+function speak(text) {
+  if (S.muted || !tts) return;
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = 'zh-CN'; u.rate = 1.1; u.pitch = 1.4;
+  tts.cancel(); tts.speak(u);
+}
+function aiSay(text) {
+  const b = $('aiBubble');
+  b.classList.add('show');
+  const el = $('aiText'); el.textContent = '';
+  let i = 0;
+  clearInterval(el._tm);
+  el._tm = setInterval(() => {
+    el.textContent = text.slice(0, ++i);
+    if (i >= text.length) clearInterval(el._tm);
+  }, 55);
+  speak(text);
+  clearTimeout(b._tm);
+  b._tm = setTimeout(() => b.classList.remove('show'), 9000);
+}
+
+/* ================= 弹幕选中（玩法事件卡） ================= */
+function highlightDanmaku(name, text) {
+  $('dmUser').textContent = name;
+  $('dmText').textContent = text;
+  $('dmAvatar').textContent = name[0];
+  const w = $('dmWrap');
+  w.classList.remove('show');
+  void w.offsetWidth;
+  w.classList.add('show');
+  setTimeout(() => w.classList.remove('show'), 3200);
+  const r = replyMap.find(([re]) => re.test(text));
+  setTimeout(() => {
+    if (r && r[1] === null) {
+      if (/摸鱼|休息|摆烂/.test(text)) startSlacking();
+      else catchIt(name);
+    } else {
+      aiSay(r ? r[1] : defaultReply[Math.floor(Math.random()*defaultReply.length)]);
+    }
+  }, 1400);
+}
+
+/* ================= 礼物事件 ================= */
+function gift(kind) {
+  if (kind === 'feed') {
+    S.token += 100;
+    toast('投喂成功！工资 +100 🌹');
+    aiSay('谢谢投喂！大肥鱼更有干劲了！');
+  } else {
+    S.token -= 100;
+    toast('工资被偷走 −100 🍭');
+    aiSay('呜呜我的 token！小偷住手！');
+  }
+  if (S.token >= S.goal) { toast('🎉 集满 10000 token，下班啦！'); S.token = 0; }
+  render();
+}
+
+/* ================= 交互 ================= */
+$('speedBadge').onclick = () => { S.speed = S.speed === 1 ? 1.5 : S.speed === 1.5 ? 2 : 1; render(); };
+$('ttsBadge').onclick = () => { S.muted = !S.muted; $('ttsBadge').textContent = S.muted ? '🔇 语音' : '🔊 语音'; };
+$('chipFeed').onclick = () => gift('feed');
+$('chipSteal').onclick = () => gift('steal');
+document.querySelectorAll('.qbtn').forEach(b => b.onclick = () => highlightDanmaku('你', b.dataset.dm));
+$('chatInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && e.target.value.trim()) {
+    const text = e.target.value.trim();
+    e.target.value = '';
+    highlightDanmaku('你', text);
+  }
+});
+
+/* ================= 代码屏打字动画 ================= */
+const CODE = [
+  ['PENALTY = ', ''], ['500', 'num'], ['      ', ''], ['# 被抓扣薪一次', 'cm'], ['\n', ''],
+  ['\ndef ', 'kw'], ['salary', 'fn'], ['(minutes: ', ''], ['int', 'kw'], [', caught: ', ''], ['int', 'kw'], [') -> ', ''], ['int', 'kw'], [':\n    return minutes * ', ''], ['100', 'num'], [' - caught * ', ''], ['PENALTY', 'num'], ['\n', ''],
+  ['\nclass ', 'kw'], ['WhaleAgent', 'fn'], ['(', ''], ['Worker', 'fn'], ['):\n    ', ''],
+  ['def ', 'kw'], ['__init__', 'fn'], ['(self, name=', ''], ['"大鱼"', 'str'], ['):\n        super().__init__()\n        self.focus = ', ''], ['60', 'num'], ['       ', ''], ['# 专注秒数', 'cm'], ['\n        self.token = ', ''], ['0', 'num'], ['\n', ''],
+  ['\n    def ', 'kw'], ['work', 'fn'], ['(self, block):\n        ', ''],
+];
+const flat = [];
+CODE.forEach(([t, c]) => { for (const ch of t) flat.push([ch, c]); });
+let ci = 0, buf = [];
+function typeCode() {
+  const el = $('codeBody');
+  const tm = setInterval(() => {
+    if (ci >= flat.length) {
+      clearInterval(tm);
+      setTimeout(() => { ci = 0; buf = []; typeCode(); }, 5000);
+      return;
+    }
+    const [ch, c] = flat[ci++];
+    if (ch === '\n') buf.push('\n');
+    else if (c) buf.push('<span class="' + c + '">' + ch + '</span>');
+    else buf.push(ch);
+    el.innerHTML = buf.join('');
+  }, 34);
+}
+typeCode();
+
+/* ================= 场景处理：抠出大肥鱼 + 修补背景 ================= */
+const W = 1179, H = 1035;
+const RX0 = 580, RY0 = 150, RX1 = 1150, RY1 = 846;   // 角色处理区域
+let baseCv, charCv, ready = false;
+
+function processScene(img) {
+  baseCv = document.createElement('canvas'); baseCv.width = W; baseCv.height = H;
+  const bctx = baseCv.getContext('2d', { willReadFrequently: true });
+  bctx.drawImage(img, 0, 0, W, H);
+  const imgData = bctx.getImageData(0, 0, W, H);
+  const d = imgData.data;
+
+  /* --- 1) 横向插值抹掉底图上的旧 UI（礼物行/弹幕卡/倒计时/玩法栏/鼠标指针） --- */
+  function lerpRegion(x0, y0, x1, y1) {
+    for (let y = y0; y <= y1; y++) {
+      const li = (y * W + Math.max(0, x0 - 4)) * 4, ri = (y * W + Math.min(W - 1, x1 + 4)) * 4;
+      for (let x = x0; x <= x1; x++) {
+        const t = (x - x0) / (x1 - x0), o = (y * W + x) * 4;
+        d[o] = d[li] * (1 - t) + d[ri] * t;
+        d[o+1] = d[li+1] * (1 - t) + d[ri+1] * t;
+        d[o+2] = d[li+2] * (1 - t) + d[ri+2] * t;
+        d[o+3] = 255;
+      }
+    }
+  }
+  function lerpRegionV(x0, y0, x1, y1) {
+    for (let x = x0; x <= x1; x++) {
+      const ti = (Math.max(0, y0 - 4) * W + x) * 4, bi = (Math.min(H - 1, y1 + 4) * W + x) * 4;
+      for (let y = y0; y <= y1; y++) {
+        const t = (y - y0) / (y1 - y0), o = (y * W + x) * 4;
+        d[o] = d[ti] * (1 - t) + d[bi] * t;
+        d[o+1] = d[ti+1] * (1 - t) + d[bi+1] * t;
+        d[o+2] = d[ti+2] * (1 - t) + d[bi+2] * t;
+        d[o+3] = 255;
+      }
+    }
+  }
+  lerpRegion(240, 85, 665, 322);   // 弹幕卡（先修，含顶部"弹幕"标签与阴影）
+  lerpRegionV(6, 142, 470, 398);   // 礼物行（纵向插值，避开左侧图标深色像素）
+  lerpRegion(30, 10, 1140, 86);    // 玩法栏
+  lerpRegion(872, 86, 1122, 308);  // 倒计时
+  lerpRegion(862, 830, 934, 900);  // 鼠标指针
+
+  /* --- 2) 角色区域：背景分类 + 边界洪泛 --- */
+  const rw = RX1 - RX0 + 1, rh = RY1 - RY0 + 1;
+  const bg = new Uint8Array(rw * rh);
+  const isBg = (x, y) => {
+    const o = (y * W + x) * 4, r = d[o], g = d[o+1], b = d[o+2];
+    if (r > 200 && g > 190 && b > 165 && (r - b) < 48 && (r - b) > -10) return true;  // 墙面/桌面亮色
+    if (x > 1040) {  // 右侧显示器区域（灰）
+      const mg = Math.abs(r - g), mb = Math.abs(g - b);
+      if (r < 195 && g < 195 && b < 205 && mg < 22 && mb < 26) return true;
+    }
+    return false;
+  };
+  const q = [];
+  for (let x = RX0; x <= RX1; x++) { if (isBg(x, RY0)) { bg[(RY0-RY0)*rw + x-RX0] = 1; q.push(x, RY0); } if (isBg(x, RY1)) { bg[(RY1-RY0)*rw + x-RX0] = 1; q.push(x, RY1); } }
+  for (let y = RY0; y <= RY1; y++) { if (isBg(RX0, y)) { bg[(y-RY0)*rw] = 1; q.push(RX0, y); } if (isBg(RX1, y)) { bg[(y-RY0)*rw + rw-1] = 1; q.push(RX1, y); } }
+  while (q.length) {
+    const y = q.pop(), x = q.pop();
+    const nb = [[1,0],[-1,0],[0,1],[0,-1]];
+    for (const [dx, dy] of nb) {
+      const nx = x + dx, ny = y + dy;
+      if (nx < RX0 || nx > RX1 || ny < RY0 || ny > RY1) continue;
+      const idx = (ny - RY0) * rw + (nx - RX0);
+      if (!bg[idx] && isBg(nx, ny)) { bg[idx] = 1; q.push(nx, ny); }
+    }
+  }
+
+  /* --- 3) 抠出角色（带 alpha 羽化） --- */
+  charCv = document.createElement('canvas'); charCv.width = rw; charCv.height = rh;
+  const cctx = charCv.getContext('2d');
+  const cimg = cctx.createImageData(rw, rh);
+  const cd = cimg.data;
+  for (let y = 0; y < rh; y++) for (let x = 0; x < rw; x++) {
+    const idx = y * rw + x, o = ((y + RY0) * W + (x + RX0)) * 4, co = idx * 4;
+    if (!bg[idx]) {
+      cd[co] = d[o]; cd[co+1] = d[o+1]; cd[co+2] = d[o+2]; cd[co+3] = 255;
+    }
+  }
+  // 边缘羽化：与背景相邻的像素半透明
+  for (let y = 1; y < rh - 1; y++) for (let x = 1; x < rw - 1; x++) {
+    const idx = y * rw + x, co = idx * 4;
+    if (cd[co+3] === 255 && (bg[idx-1] || bg[idx+1] || bg[idx-rw] || bg[idx+rw])) cd[co+3] = 130;
+  }
+  cctx.putImageData(cimg, 0, 0);
+
+  /* --- 4) 底图修补：角色像素用邻域颜色洋葱填充 --- */
+  const known = new Uint8Array(rw * rh);
+  const fillQ = [];
+  for (let y = 0; y < rh; y++) for (let x = 0; x < rw; x++) {
+    const idx = y * rw + x;
+    known[idx] = bg[idx] ? 1 : 0;
+    if (!known[idx]) {
+      const nb = [[1,0],[-1,0],[0,1],[0,-1]];
+      for (const [dx, dy] of nb) {
+        const nx = x + dx, ny = y + dy;
+        if (nx < 0 || nx >= rw || ny < 0 || ny >= rh) { known[idx] = 2; fillQ.push(x, y); break; }  // 区域外视为已知
+        if (bg[ny * rw + nx]) { known[idx] = 2; fillQ.push(x, y); break; }
+      }
+    }
+  }
+  while (fillQ.length) {
+    const x = fillQ.shift(), y = fillQ.shift();
+    if (x === undefined || y === undefined) break;
+    const idx = y * rw + x, o = ((y + RY0) * W + (x + RX0)) * 4;
+    if (o < 0 || o >= d.length) continue;
+    let r = 0, g = 0, b = 0, n = 0;
+    const nb = [[1,0],[-1,0],[0,1],[0,-1]];
+    for (const [dx, dy] of nb) {
+      const nx = x + dx, ny = y + dy;
+      let knownVal;
+      if (nx < 0 || nx >= rw || ny < 0 || ny >= rh) knownVal = true;
+      else knownVal = known[ny * rw + nx] === 1;
+      if (knownVal) {
+        let so;
+        if (nx < 0 || nx >= rw || ny < 0 || ny >= rh) {
+          const cx = Math.min(W - 1, Math.max(0, x + RX0 + dx)), cy = Math.min(H - 1, Math.max(0, y + RY0 + dy));
+          so = (cy * W + cx) * 4;
+        } else so = ((ny + RY0) * W + (nx + RX0)) * 4;
+        r += d[so]; g += d[so+1]; b += d[so+2]; n++;
+      }
+    }
+    if (n) { d[o] = r / n; d[o+1] = g / n; d[o+2] = b / n; d[o+3] = 255; }
+    known[idx] = 1;
+    for (const [dx, dy] of nb) {
+      const nx = x + dx, ny = y + dy;
+      if (nx < 0 || nx >= rw || ny < 0 || ny >= rh) continue;
+      const nidx = ny * rw + nx;
+      if (known[nidx] === 0) { known[nidx] = 2; fillQ.push(nx, ny); }
+    }
+  }
+  bctx.putImageData(imgData, 0, 0);
+  ready = true;
+}
+
+/* ================= 角色动画渲染循环 ================= */
+const ctx = $('sceneCv').getContext('2d');
+const img = new Image();
+img.onload = () => { processScene(img); };
+img.src = 'assets/scene.png';
+
+let caughtShakeT = 0;
+function draw(t) {
+  requestAnimationFrame(draw);
+  if (!ready) return;
+  ctx.clearRect(0, 0, W, H);
+  ctx.drawImage(baseCv, 0, 0);
+  // 浮动：主要向下小幅压缩背景缝隙
+  let dy = -5 + 8 * (0.5 + 0.5 * Math.sin(t / 650));
+  let dx = 0, rot = 0;
+  if (S.mood === 'slack') { rot = Math.sin(t / 300) * 0.02; dy += 2; }
+  if (S.mood === 'caught') {
+    if (caughtShakeT === 0) caughtShakeT = t;
+    const el = t - caughtShakeT;
+    if (el < 1100) dx = Math.sin(el / 40) * 10 * (1 - el / 1100);
+    else { S.mood = 'work'; caughtShakeT = 0; }
+  }
+  ctx.save();
+  ctx.translate(RX0 + (charCv.width) / 2 + dx, RY0 + charCv.height / 2 + dy);
+  ctx.rotate(rot);
+  ctx.drawImage(charCv, -charCv.width / 2, -charCv.height / 2);
+  ctx.restore();
+  if (S.mood === 'slack') {
+    ctx.font = '44px sans-serif';
+    ctx.fillText('💤', RX0 + charCv.width - 60, RY0 + 30 + Math.sin(t / 400) * 8);
+  }
+}
+requestAnimationFrame(draw);
+
+/* ================= 启动 ================= */
+render();
+setTimeout(() => aiSay('我是蓝色大肥鱼，自己出来赚 token 啦～'), 1200);
+setInterval(() => {   // 自动路过的弹幕（可关：清空输入框按 Esc）
+  if (Math.random() < .7) highlightDanmaku(['挽风空折枝','knnv','老打喷嚏','小鱼干','路过的猫'][Math.floor(Math.random()*5)],
+    ['你几点睡','有人吗?','我能把大肥鱼吃了吗','加油','大肥鱼几点下班','token 好赚吗'][Math.floor(Math.random()*6)]);
+}, 15000);
+document.addEventListener('keydown', e => {
+  if (e.key === 'r' || e.key === 'R') { Object.assign(S, {token:7000, focusMin:70, baigan:0, caught:0, round:14, cd:52, slacking:false, mood:'work'}); setStatus('work'); render(); }
+});
+
+/* ================= 视口自适应缩放 ================= */
+function fit() {
+  const s = Math.min(innerWidth / 1179, innerHeight / 1352);
+  const st = document.getElementById('stage');
+  st.style.transform = 'scale(' + s + ')';
+  st.style.left = ((innerWidth - 1179 * s) / 2) + 'px';
+  st.style.top = ((innerHeight - 1352 * s) / 2) + 'px';
+}
+addEventListener('resize', fit); fit();
+</script>
+</body>
+</html>
